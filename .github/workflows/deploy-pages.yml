@@ -26,20 +26,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: ironman-estimator/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install
-        working-directory: ironman-estimator
         run: npm ci
 
       - name: Build
-        working-directory: ironman-estimator
         run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ironman-estimator/dist
+          path: dist
 
   deploy:
     environment:
