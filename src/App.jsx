@@ -33,8 +33,13 @@ function qsString(obj) {
 export default function App() {
   const raceGroups = useMemo(() => groupRaces(RACE_CATALOG), []);
 
+  const KM_PER_MILE = 1.60934;
+  const MILES_PER_KM = 1 / KM_PER_MILE;
+  const METERS_PER_YARD = 0.9144;
+
   const [raceId, setRaceId] = useState(RACE_CATALOG[0]?.id);
   const [levelKey, setLevelKey] = useState("beginner");
+  const [units, setUnits] = useState("imperial"); // imperial | metric
 
   // paces
   const [swim, setSwim] = useState("2:05"); // min:sec per 100yd
@@ -53,6 +58,7 @@ export default function App() {
     const q = qsParse();
     if (q.race) setRaceId(q.race);
     if (q.level) setLevelKey(q.level);
+    if (q.units) setUnits(q.units);
     if (q.swim) setSwim(q.swim);
     if (q.bike) setBike(q.bike);
     if (q.run) setRun(q.run);
@@ -64,6 +70,52 @@ export default function App() {
   }, []);
 
   const race = useMemo(() => getRaceById(raceId), [raceId]);
+
+  function formatMinSec(minFloat) {
+    if (!Number.isFinite(minFloat) || minFloat <= 0) return "";
+    const totalSec = Math.round(minFloat * 60);
+    const mm = Math.floor(totalSec / 60);
+    const ss = totalSec % 60;
+    return `${mm}:${String(ss).padStart(2, "0")}`;
+  }
+
+  function parseMinSecToMinutes(s) {
+    const m = String(s).trim();
+    if (!m) return NaN;
+    if (m.includes(":")) {
+      const [mm, ss] = m.split(":");
+      const mins = Number(mm);
+      const secs = Number(ss);
+      return mins + secs / 60;
+    }
+    return Number(m);
+  }
+
+  function convertInputs(nextUnits) {
+    // Convert existing input strings so the *performance* stays the same when toggling units.
+    const swimMin = parseMinSecToMinutes(swim);
+    const runMin = parseMinSecToMinutes(run);
+    const bikeNum = Number(bike);
+
+    // swim: min/100yd <-> min/100m
+    // 100yd = 91.44m; pace per 100m is slower by factor (100m / 91.44m) = 1.09361
+    const SWIM_IMP_TO_MET = 1 / METERS_PER_YARD; // 1.09361
+    const SWIM_MET_TO_IMP = METERS_PER_YARD; // 0.9144
+
+    if (nextUnits === "metric" && units === "imperial") {
+      if (Number.isFinite(swimMin)) setSwim(formatMinSec(swimMin * SWIM_IMP_TO_MET));
+      if (Number.isFinite(runMin)) setRun(formatMinSec(runMin / KM_PER_MILE)); // min/mi -> min/km
+      if (Number.isFinite(bikeNum)) setBike((bikeNum * KM_PER_MILE).toFixed(1)); // mph -> km/h
+    }
+
+    if (nextUnits === "imperial" && units === "metric") {
+      if (Number.isFinite(swimMin)) setSwim(formatMinSec(swimMin * SWIM_MET_TO_IMP));
+      if (Number.isFinite(runMin)) setRun(formatMinSec(runMin * KM_PER_MILE)); // min/km -> min/mi
+      if (Number.isFinite(bikeNum)) setBike((bikeNum * MILES_PER_KM).toFixed(1)); // km/h -> mph
+    }
+
+    setUnits(nextUnits);
+  }
 
   useEffect(() => {
     if (!race) return;
@@ -89,12 +141,34 @@ export default function App() {
       return Number(m);
     };
 
+    // Keep estimator math in imperial units internally.
+    // Convert user inputs based on the selected unit system.
+    const swimMinPer100 = parseMinSec(swim);
+    const bikeSpeed = Number(bike);
+    const runMinPer = parseMinSec(run);
+
+    const MILES_PER_KM = 0.621371;
+    const KM_PER_MILE = 1.60934;
+    const YARDS_PER_METER = 1 / 0.9144;
+
+    const swimMinPer100Yd = units === "metric"
+      ? swimMinPer100 * (100 / (100 * YARDS_PER_METER)) // per 100m -> per 100yd (multiply by 0.9144)
+      : swimMinPer100;
+
+    const bikeMph = units === "metric"
+      ? bikeSpeed * MILES_PER_KM // km/h -> mph
+      : bikeSpeed;
+
+    const runMinPerMile = units === "metric"
+      ? runMinPer * KM_PER_MILE // min/km -> min/mile
+      : runMinPer;
+
     return {
-      swimMinPer100Yd: parseMinSec(swim),
-      bikeMph: Number(bike),
-      runMinPerMile: parseMinSec(run),
+      swimMinPer100Yd,
+      bikeMph,
+      runMinPerMile,
     };
-  }, [swim, bike, run]);
+  }, [swim, bike, run, units]);
 
   const result = useMemo(() => {
     if (!race) return null;
@@ -118,6 +192,7 @@ export default function App() {
     const q = {
       race: raceId,
       level: levelKey,
+      units,
       swim,
       bike,
       run,
@@ -128,7 +203,7 @@ export default function App() {
       heat,
     };
     return base + qsString(q);
-  }, [raceId, levelKey, swim, bike, run, dynOverride, swimCurrent, bikeTerrain, runTerrain, heat]);
+  }, [raceId, levelKey, units, swim, bike, run, dynOverride, swimCurrent, bikeTerrain, runTerrain, heat]);
 
   async function copyShare() {
     try {
@@ -166,41 +241,60 @@ export default function App() {
           </label>
           {race && (
             <div className="tiny">
-              Swim {race.swimYards} yd • Bike {race.bikeMiles} mi • Run {race.runMiles} mi
+              {units === "metric" ? (
+                <>
+                  Swim {Math.round(race.swimYards * METERS_PER_YARD)} m • Bike {(race.bikeMiles * KM_PER_MILE).toFixed(1)} km • Run {(race.runMiles * KM_PER_MILE).toFixed(1)} km
+                </>
+              ) : (
+                <>
+                  Swim {race.swimYards} yd • Bike {race.bikeMiles} mi • Run {race.runMiles} mi
+                </>
+              )}
             </div>
           )}
         </section>
 
         <section className="card">
           <h2>2) Enter your race paces</h2>
+
           <div className="row3">
             <label className="label">
-              Swim pace (100yd)
-              <input value={swim} onChange={(e) => setSwim(e.target.value)} placeholder="2:00" />
+              {units === "metric" ? "Swim pace (100m)" : "Swim pace (100yd)"}
+              <input value={swim} onChange={(e) => setSwim(e.target.value)} placeholder="2:00" inputMode="decimal" />
               <div className="hint">format: m:ss</div>
             </label>
             <label className="label">
-              Bike speed (mph)
-              <input value={bike} onChange={(e) => setBike(e.target.value)} placeholder="18.0" />
+              {units === "metric" ? "Bike speed (km/h)" : "Bike speed (mph)"}
+              <input value={bike} onChange={(e) => setBike(e.target.value)} placeholder={units === "metric" ? "29.0" : "18.0"} inputMode="decimal" />
               <div className="hint">avg speed</div>
             </label>
             <label className="label">
-              Run pace (mile)
-              <input value={run} onChange={(e) => setRun(e.target.value)} placeholder="9:00" />
+              {units === "metric" ? "Run pace (km)" : "Run pace (mile)"}
+              <input value={run} onChange={(e) => setRun(e.target.value)} placeholder="5:35" inputMode="decimal" />
               <div className="hint">format: m:ss</div>
             </label>
           </div>
 
-          <label className="label">
-            Level (transitions + fatigue)
-            <select value={levelKey} onChange={(e) => setLevelKey(e.target.value)}>
-              {Object.entries(LEVELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="row2">
+            <label className="label">
+              Units
+              <select value={units} onChange={(e) => convertInputs(e.target.value)}>
+                <option value="imperial">Imperial (yd/mi, mph, min/mi)</option>
+                <option value="metric">Metric (m/km, km/h, min/km)</option>
+              </select>
+            </label>
+
+            <label className="label">
+              Level (transitions + fatigue)
+              <select value={levelKey} onChange={(e) => setLevelKey(e.target.value)}>
+                {Object.entries(LEVELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </section>
 
         <section className="card">
@@ -290,7 +384,7 @@ export default function App() {
 
       <footer className="footer">
         <div className="tiny">
-          v0.1 • imperial units • adjust multipliers later when reality yells at us
+          v0.2 • {units === "metric" ? "metric units" : "imperial units"} • adjust multipliers later when reality yells at us
         </div>
       </footer>
     </div>
