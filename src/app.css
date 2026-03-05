@@ -20,15 +20,18 @@ body{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.wrap{max-width:1100px; margin:0 auto; padding:24px 18px 40px; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));}
+.wrap{max-width:1100px; margin:0 auto; padding:24px 18px 40px; padding-top: calc(24px + env(safe-area-inset-top, 0px)); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));}
 .header{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:18px}
 .logo{font-weight:900; letter-spacing:0.14em; font-size:18px}
 .tagline{color:var(--muted); font-size:12px}
 
 @media (max-width: 520px){
-  .wrap{padding:16px 14px 28px}
-  .header{flex-direction:column; align-items:flex-start; gap:6px}
-  .logo{font-size:16px}
+  .wrap{padding:16px 14px 28px; padding-top: calc(16px + env(safe-area-inset-top, 0px)); padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));}
+  .header{flex-direction:column; align-items:flex-start; gap:6px; margin-bottom:14px}
+  .logo{font-size:16px; line-height:1.2}
+
+  /* Prevent iOS from zooming inputs on focus */
+  .label select, .label input{font-size:16px}
 }
 
 .grid{display:grid; grid-template-columns: 1fr 1fr; gap:16px}
@@ -83,6 +86,7 @@ body{
 .check{display:flex; gap:10px; align-items:center; color:var(--muted); margin-top:10px}
 
 .disabled{opacity:.55}
+.row2.disabled{pointer-events:none}
 
 .result .big{font-size:42px; font-weight:900; letter-spacing:.06em; margin:8px 0 10px}
 @media (max-width: 520px){
