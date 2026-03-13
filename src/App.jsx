@@ -91,6 +91,34 @@ export default function App() {
     return Number(m);
   }
 
+  function normalizePaceInput(raw) {
+    // Goal: make mobile entry easy while still accepting m:ss.
+    // - Allow digits and a single colon.
+    // - If user types only digits, auto-insert a colon before the last 2 digits (e.g., 205 -> 2:05).
+    const s = String(raw ?? "").trim();
+    if (!s) return "";
+
+    // keep only digits and colons
+    let cleaned = s.replace(/[^0-9:]/g, "");
+
+    // if user already typed a colon, normalize to one colon
+    if (cleaned.includes(":")) {
+      const parts = cleaned.split(":");
+      const mm = (parts[0] ?? "").replace(/\D/g, "");
+      const ss = (parts.slice(1).join("") ?? "").replace(/\D/g, "");
+      const ss2 = ss.slice(0, 2);
+      return ss2.length ? `${mm}:${ss2}` : `${mm}:`;
+    }
+
+    // digits-only: insert colon before last 2 digits when possible
+    cleaned = cleaned.replace(/\D/g, "");
+    if (cleaned.length <= 2) return cleaned; // let them type 2, 05, etc.
+
+    const mm = cleaned.slice(0, -2);
+    const ss = cleaned.slice(-2);
+    return `${mm}:${ss}`;
+  }
+
   function convertInputs(nextUnits) {
     // Convert existing input strings so the *performance* stays the same when toggling units.
     const swimMin = parseMinSecToMinutes(swim);
@@ -260,7 +288,14 @@ export default function App() {
           <div className="row3">
             <label className="label">
               {units === "metric" ? "Swim pace (100m)" : "Swim pace (100yd)"}
-              <input value={swim} onChange={(e) => setSwim(e.target.value)} placeholder="2:00" inputMode="decimal" />
+              <input
+                value={swim}
+                onChange={(e) => setSwim(normalizePaceInput(e.target.value))}
+                placeholder="2:05"
+                inputMode="numeric"
+                pattern="[0-9:]*"
+                autoComplete="off"
+              />
               <div className="hint">format: m:ss</div>
             </label>
             <label className="label">
@@ -270,7 +305,14 @@ export default function App() {
             </label>
             <label className="label">
               {units === "metric" ? "Run pace (km)" : "Run pace (mile)"}
-              <input value={run} onChange={(e) => setRun(e.target.value)} placeholder="5:35" inputMode="decimal" />
+              <input
+                value={run}
+                onChange={(e) => setRun(normalizePaceInput(e.target.value))}
+                placeholder={units === "metric" ? "5:35" : "9:00"}
+                inputMode="numeric"
+                pattern="[0-9:]*"
+                autoComplete="off"
+              />
               <div className="hint">format: m:ss</div>
             </label>
           </div>
