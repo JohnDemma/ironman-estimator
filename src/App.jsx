@@ -320,7 +320,7 @@ export default function App() {
 
       <main className="grid">
         <section className="card">
-          <h2>1) Select your race</h2>
+          <h2>1) Select your race and options</h2>
           <label className="label">
             Race
             <select value={raceId} onChange={(e) => setRaceId(e.target.value)}>
@@ -356,6 +356,17 @@ export default function App() {
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="row2">
+            <label className="label">
+              Bike input
+              <select value={bikeModel} onChange={(e) => setBikeModel(e.target.value)}>
+                <option value="speed">Speed</option>
+                <option value="power">Power (watts)</option>
+              </select>
+            </label>
+            <div />
           </div>
 
           {race && (
@@ -435,14 +446,6 @@ export default function App() {
           </div>
 
           <div className="row2">
-            <label className="label">
-              Bike input
-              <select value={bikeModel} onChange={(e) => setBikeModel(e.target.value)}>
-                <option value="speed">Speed</option>
-                <option value="power">Power (watts)</option>
-              </select>
-            </label>
-
             {bikeModel === "power" ? (
               <label className="label">
                 Athlete weight ({units === "metric" ? "kg" : "lb"})
@@ -458,6 +461,7 @@ export default function App() {
             ) : (
               <div />
             )}
+            <div />
           </div>
 
           {bikeModel === "power" && (
