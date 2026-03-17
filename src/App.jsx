@@ -305,6 +305,28 @@ export default function App() {
               ))}
             </select>
           </label>
+
+          <div className="row2">
+            <label className="label">
+              Units
+              <select value={units} onChange={(e) => convertInputs(e.target.value)}>
+                <option value="imperial">Imperial (yd/mi, mph, min/mi)</option>
+                <option value="metric">Metric (m/km, km/h, min/km)</option>
+              </select>
+            </label>
+
+            <label className="label">
+              Level (transitions + fatigue)
+              <select value={levelKey} onChange={(e) => setLevelKey(e.target.value)}>
+                {Object.entries(LEVELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           {race && (
             <div className="tiny">
               {units === "metric" ? (
@@ -376,27 +398,6 @@ export default function App() {
                 autoComplete="off"
               />
               <div className="hint">format: m:ss</div>
-            </label>
-          </div>
-
-          <div className="row2">
-            <label className="label">
-              Units
-              <select value={units} onChange={(e) => convertInputs(e.target.value)}>
-                <option value="imperial">Imperial (yd/mi, mph, min/mi)</option>
-                <option value="metric">Metric (m/km, km/h, min/km)</option>
-              </select>
-            </label>
-
-            <label className="label">
-              Level (transitions + fatigue)
-              <select value={levelKey} onChange={(e) => setLevelKey(e.target.value)}>
-                {Object.entries(LEVELS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
             </label>
           </div>
 
