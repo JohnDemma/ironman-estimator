@@ -629,7 +629,7 @@ export default function App() {
 
       <footer className="footer">
         <div className="tiny">
-          v0.4 • {units === "metric" ? "metric units" : "imperial units"} • watts bike (presets + aero slider)
+          v0.5 • {units === "metric" ? "metric units" : "imperial units"} • watts bike (fixed elevation math)
         </div>
       </footer>
     </div>

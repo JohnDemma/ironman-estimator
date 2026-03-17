@@ -69,10 +69,21 @@ export function estimateBikeMphFromPower({
   drivetrainLoss = 0.03,
   airDensity = 1.226,
 }) {
-  // Simple physics-based average-speed estimator.
-  // Uses a constant "effective grade" derived from total elevation gain / distance.
-  // This is not as accurate as integrating a full GPX grade profile, but it is a meaningful
-  // step toward course-specific power modeling and matches real-world intuition.
+  // Physics-based average-speed estimator.
+  // IMPORTANT: elevation gain is treated as *extra energy* (m*g*gain), not a constant positive grade.
+  // Using gain/dist as "grade" over-penalizes rolling courses.
+  //
+  // Model:
+  // - Assume constant wheel power P
+  // - Average speed v = dist / t
+  // - Total work required:
+  //     W = W_aero + W_roll + W_climb
+  //   where
+  //     W_aero  = 0.5 * rho * CdA * v^3 * t
+  //            = 0.5 * rho * CdA * dist^3 / t^2
+  //     W_roll  = Crr * m * g * dist
+  //     W_climb = m * g * gain
+  // - Solve for t such that P*t = W
 
   const P = clamp(Number(powerWatts), 1, 2000) * (1 - clamp(drivetrainLoss, 0, 0.2));
   const m = clamp(Number(athleteKg) + Number(bikeKg), 20, 200);
@@ -83,23 +94,31 @@ export function estimateBikeMphFromPower({
 
   const distM = clamp(Number(bikeMiles), 1, 200) * 1609.34;
   const gainM = Math.max(0, Number(elevationGainFt)) * 0.3048;
-  const grade = clamp(gainM / distM, 0, 0.2);
 
-  // Solve P = (aero + rolling + climbing) power at steady v.
-  // aero: 0.5*rho*CdA*v^3
-  // rolling: Crr*m*g*v
-  // climbing (effective): m*g*grade*v
-  const f = (v) => 0.5 * rho * CdA * v ** 3 + (Crr * m * g + m * g * grade) * v;
+  const Wroll = Crr * m * g * distM;
+  const Wclimb = m * g * gainM;
 
-  // binary search for v in [0.5 m/s, 25 m/s] (~1 mph to 56 mph)
-  let lo = 0.5;
-  let hi = 25;
-  for (let iter = 0; iter < 60; iter++) {
+  const Waero = (t) => 0.5 * rho * CdA * (distM ** 3) / (t ** 2);
+  const F = (t) => P * t - (Waero(t) + Wroll + Wclimb);
+
+  // Search for time t in seconds.
+  // Lower bound: insanely fast (2 hours for 112mi).
+  // Upper bound: very slow (12 hours).
+  let lo = 2 * 3600;
+  let hi = 12 * 3600;
+
+  // Ensure bounds bracket a root by expanding if needed.
+  // F(t) increases with t (aero term falls with t^2), so F(lo) might be negative and F(hi) positive.
+  for (let k = 0; k < 5 && F(hi) < 0; k++) hi *= 1.5;
+
+  for (let iter = 0; iter < 70; iter++) {
     const mid = (lo + hi) / 2;
-    if (f(mid) > P) hi = mid;
+    if (F(mid) >= 0) hi = mid;
     else lo = mid;
   }
-  const v = (lo + hi) / 2;
+
+  const t = (lo + hi) / 2;
+  const v = distM / t;
   const mph = (v * 3600) / 1609.34;
   return mph;
 }
