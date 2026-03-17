@@ -1300,24 +1300,6 @@ export const RACE_CATALOG = [
     "sourceUrl": "https://www.ironman.com/races/im703-new-york"
   },
   {
-    "id": "im703-new-zealand",
-    "brand": "IRONMAN",
-    "name": "IRONMAN 70.3 New Zealand",
-    "distance": "70.3",
-    "swimYards": 2112,
-    "bikeMiles": 56,
-    "runMiles": 13.1,
-    "date": "2026-03-07T00:00:00+0000",
-    "location": "Taupō, New Zealand",
-    "dynamics": {
-      "swimCurrent": "none",
-      "bikeTerrain": "flat",
-      "runTerrain": "flat",
-      "heat": "cool"
-    },
-    "sourceUrl": "https://www.ironman.com/races/im703-new-zealand"
-  },
-  {
     "id": "im703-nice",
     "brand": "IRONMAN",
     "name": "IRONMAN 70.3 Nice",
@@ -2351,6 +2333,7 @@ export const RACE_CATALOG = [
     "swimYards": 4224,
     "bikeMiles": 112,
     "runMiles": 26.2,
+    "bikeElevationGainFt": 4300,
     "date": "2026-09-27T00:00:00+0000",
     "location": "Chattanooga, United States",
     "dynamics": {
@@ -2666,24 +2649,6 @@ export const RACE_CATALOG = [
       "heat": "warm"
     },
     "sourceUrl": "https://www.ironman.com/races/im-maryland"
-  },
-  {
-    "id": "im-new-zealand",
-    "brand": "IRONMAN",
-    "name": "IRONMAN New Zealand",
-    "distance": "140.6",
-    "swimYards": 4224,
-    "bikeMiles": 112,
-    "runMiles": 26.2,
-    "date": "2026-03-07T00:00:00+0000",
-    "location": "Taupō, New Zealand",
-    "dynamics": {
-      "swimCurrent": "none",
-      "bikeTerrain": "rolling",
-      "runTerrain": "rolling",
-      "heat": "cool"
-    },
-    "sourceUrl": "https://www.ironman.com/races/im-new-zealand"
   },
   {
     "id": "im-oman",

@@ -58,6 +58,52 @@ function runPaceToSecondsPerMile(runMinPerMile) {
   return runMinPerMile * 60;
 }
 
+export function estimateBikeMphFromPower({
+  powerWatts,
+  athleteKg,
+  bikeKg,
+  cdA,
+  crr,
+  bikeMiles,
+  elevationGainFt = 0,
+  drivetrainLoss = 0.03,
+  airDensity = 1.226,
+}) {
+  // Simple physics-based average-speed estimator.
+  // Uses a constant "effective grade" derived from total elevation gain / distance.
+  // This is not as accurate as integrating a full GPX grade profile, but it is a meaningful
+  // step toward course-specific power modeling and matches real-world intuition.
+
+  const P = clamp(Number(powerWatts), 1, 2000) * (1 - clamp(drivetrainLoss, 0, 0.2));
+  const m = clamp(Number(athleteKg) + Number(bikeKg), 20, 200);
+  const g = 9.80665;
+  const rho = clamp(Number(airDensity), 0.9, 1.4);
+  const CdA = clamp(Number(cdA), 0.15, 0.6);
+  const Crr = clamp(Number(crr), 0.001, 0.02);
+
+  const distM = clamp(Number(bikeMiles), 1, 200) * 1609.34;
+  const gainM = Math.max(0, Number(elevationGainFt)) * 0.3048;
+  const grade = clamp(gainM / distM, 0, 0.2);
+
+  // Solve P = (aero + rolling + climbing) power at steady v.
+  // aero: 0.5*rho*CdA*v^3
+  // rolling: Crr*m*g*v
+  // climbing (effective): m*g*grade*v
+  const f = (v) => 0.5 * rho * CdA * v ** 3 + (Crr * m * g + m * g * grade) * v;
+
+  // binary search for v in [0.5 m/s, 25 m/s] (~1 mph to 56 mph)
+  let lo = 0.5;
+  let hi = 25;
+  for (let iter = 0; iter < 60; iter++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) > P) hi = mid;
+    else lo = mid;
+  }
+  const v = (lo + hi) / 2;
+  const mph = (v * 3600) / 1609.34;
+  return mph;
+}
+
 function formatHMS(totalSeconds) {
   const s = Math.round(totalSeconds);
   const h = Math.floor(s / 3600);

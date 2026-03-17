@@ -79,6 +79,12 @@ function looksLikeRacePage(url) {
   return true;
 }
 
+const COURSE_OVERRIDES = {
+  // Source: ironman.com course overview page (bike elevation gain)
+  // https://www.ironman.com/races/im-chattanooga/course
+  'im-chattanooga': { bikeElevationGainFt: 4300 },
+};
+
 function parseRaceFromHtml({ url, html }) {
   const m = html.match(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/i);
   if (!m) return null;
@@ -104,6 +110,7 @@ function parseRaceFromHtml({ url, html }) {
   if (!urlSlug) return null;
 
   const distance = urlSlug.startsWith('im703-') || /70\.3/.test(name) ? '70.3' : '140.6';
+  const courseOverride = COURSE_OVERRIDES[urlSlug] ?? null;
 
   const desc = String(ev.description ?? '').toLowerCase();
 
@@ -145,6 +152,7 @@ function parseRaceFromHtml({ url, html }) {
     name,
     distance,
     ...defaultDistances[distance],
+    ...(courseOverride ?? {}),
     date: String(ev.startDate),
     location: parts.join(', '),
     dynamics: { swimCurrent, bikeTerrain, runTerrain, heat },

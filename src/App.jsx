@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./app.css";
 import { RACE_CATALOG, getRaceById } from "./races.generated";
-import { DYNAMICS, LEVELS, estimateFinish } from "./calc";
+import { DYNAMICS, LEVELS, estimateBikeMphFromPower, estimateFinish } from "./calc";
 
 function groupRaces(races) {
   const groups = new Map();
@@ -41,6 +41,13 @@ export default function App() {
   const [levelKey, setLevelKey] = useState("beginner");
   const [units, setUnits] = useState("imperial"); // imperial | metric
 
+  const [bikeModel, setBikeModel] = useState("speed"); // speed | power
+  const [bikeWatts, setBikeWatts] = useState("180");
+  const [athleteWeight, setAthleteWeight] = useState(units === "metric" ? "75" : "165");
+  const [bikeWeight, setBikeWeight] = useState(units === "metric" ? "9" : "20");
+  const [cdA, setCdA] = useState("0.28");
+  const [crr, setCrr] = useState("0.004");
+
   // paces
   const [swim, setSwim] = useState("2:05"); // min:sec per 100yd
   const [bike, setBike] = useState("18.0"); // mph
@@ -59,6 +66,14 @@ export default function App() {
     if (q.race) setRaceId(q.race);
     if (q.level) setLevelKey(q.level);
     if (q.units) setUnits(q.units);
+
+    if (q.bm) setBikeModel(q.bm);
+    if (q.w) setBikeWatts(q.w);
+    if (q.aw) setAthleteWeight(q.aw);
+    if (q.bw) setBikeWeight(q.bw);
+    if (q.cda) setCdA(q.cda);
+    if (q.crr) setCrr(q.crr);
+
     if (q.swim) setSwim(q.swim);
     if (q.bike) setBike(q.bike);
     if (q.run) setRun(q.run);
@@ -124,6 +139,8 @@ export default function App() {
     const swimMin = parseMinSecToMinutes(swim);
     const runMin = parseMinSecToMinutes(run);
     const bikeNum = Number(bike);
+    const athleteNum = Number(athleteWeight);
+    const bikeWeightNum = Number(bikeWeight);
 
     // swim: min/100yd <-> min/100m
     // 100yd = 91.44m; pace per 100m is slower by factor (100m / 91.44m) = 1.09361
@@ -134,12 +151,16 @@ export default function App() {
       if (Number.isFinite(swimMin)) setSwim(formatMinSec(swimMin * SWIM_IMP_TO_MET));
       if (Number.isFinite(runMin)) setRun(formatMinSec(runMin / KM_PER_MILE)); // min/mi -> min/km
       if (Number.isFinite(bikeNum)) setBike((bikeNum * KM_PER_MILE).toFixed(1)); // mph -> km/h
+      if (Number.isFinite(athleteNum)) setAthleteWeight((athleteNum / 2.20462).toFixed(1)); // lb -> kg
+      if (Number.isFinite(bikeWeightNum)) setBikeWeight((bikeWeightNum / 2.20462).toFixed(1)); // lb -> kg
     }
 
     if (nextUnits === "imperial" && units === "metric") {
       if (Number.isFinite(swimMin)) setSwim(formatMinSec(swimMin * SWIM_MET_TO_IMP));
       if (Number.isFinite(runMin)) setRun(formatMinSec(runMin * KM_PER_MILE)); // min/km -> min/mi
       if (Number.isFinite(bikeNum)) setBike((bikeNum * MILES_PER_KM).toFixed(1)); // km/h -> mph
+      if (Number.isFinite(athleteNum)) setAthleteWeight((athleteNum * 2.20462).toFixed(0)); // kg -> lb
+      if (Number.isFinite(bikeWeightNum)) setBikeWeight((bikeWeightNum * 2.20462).toFixed(0)); // kg -> lb
     }
 
     setUnits(nextUnits);
@@ -175,28 +196,39 @@ export default function App() {
     const bikeSpeed = Number(bike);
     const runMinPer = parseMinSec(run);
 
-    const MILES_PER_KM = 0.621371;
-    const KM_PER_MILE = 1.60934;
-    const YARDS_PER_METER = 1 / 0.9144;
+    const athleteW = Number(athleteWeight);
+    const bikeW = Number(bikeWeight);
 
-    const swimMinPer100Yd = units === "metric"
-      ? swimMinPer100 * (100 / (100 * YARDS_PER_METER)) // per 100m -> per 100yd (multiply by 0.9144)
-      : swimMinPer100;
+    const swimMinPer100Yd = units === "metric" ? swimMinPer100 * 0.9144 : swimMinPer100; // per 100m -> per 100yd
 
-    const bikeMph = units === "metric"
-      ? bikeSpeed * MILES_PER_KM // km/h -> mph
-      : bikeSpeed;
+    const runMinPerMile = units === "metric" ? runMinPer * KM_PER_MILE : runMinPer; // min/km -> min/mile
 
-    const runMinPerMile = units === "metric"
-      ? runMinPer * KM_PER_MILE // min/km -> min/mile
-      : runMinPer;
+    const athleteKg = units === "metric" ? athleteW : athleteW / 2.20462;
+    const bikeKg = units === "metric" ? bikeW : bikeW / 2.20462;
+
+    const elevationGainFt = race?.bikeElevationGainFt ?? 0;
+
+    const bikeMph = bikeModel === "power"
+      ? estimateBikeMphFromPower({
+          powerWatts: Number(bikeWatts),
+          athleteKg,
+          bikeKg,
+          cdA: Number(cdA),
+          crr: Number(crr),
+          bikeMiles: race?.bikeMiles ?? 0,
+          elevationGainFt,
+        })
+      : (units === "metric" ? bikeSpeed * MILES_PER_KM : bikeSpeed);
 
     return {
       swimMinPer100Yd,
       bikeMph,
       runMinPerMile,
+      athleteKg,
+      bikeKg,
+      elevationGainFt,
     };
-  }, [swim, bike, run, units]);
+  }, [swim, bike, run, units, bikeModel, bikeWatts, athleteWeight, bikeWeight, cdA, crr, race]);
 
   const result = useMemo(() => {
     if (!race) return null;
@@ -221,6 +253,12 @@ export default function App() {
       race: raceId,
       level: levelKey,
       units,
+      bm: bikeModel,
+      w: bikeWatts,
+      aw: athleteWeight,
+      bw: bikeWeight,
+      cda: cdA,
+      crr,
       swim,
       bike,
       run,
@@ -231,7 +269,7 @@ export default function App() {
       heat,
     };
     return base + qsString(q);
-  }, [raceId, levelKey, units, swim, bike, run, dynOverride, swimCurrent, bikeTerrain, runTerrain, heat]);
+  }, [raceId, levelKey, units, bikeModel, bikeWatts, athleteWeight, bikeWeight, cdA, crr, swim, bike, run, dynOverride, swimCurrent, bikeTerrain, runTerrain, heat]);
 
   async function copyShare() {
     try {
@@ -299,9 +337,33 @@ export default function App() {
               <div className="hint">format: m:ss</div>
             </label>
             <label className="label">
-              {units === "metric" ? "Bike speed (km/h)" : "Bike speed (mph)"}
-              <input value={bike} onChange={(e) => setBike(e.target.value)} placeholder={units === "metric" ? "29.0" : "18.0"} inputMode="decimal" />
-              <div className="hint">avg speed</div>
+              {bikeModel === "power" ? "Bike power (watts)" : (units === "metric" ? "Bike speed (km/h)" : "Bike speed (mph)")}
+
+              {bikeModel === "power" ? (
+                <>
+                  <input
+                    value={bikeWatts}
+                    onChange={(e) => setBikeWatts(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="180"
+                    inputMode="decimal"
+                    autoComplete="off"
+                  />
+                  <div className="hint">
+                    Est. speed: {Number.isFinite(parsed.bikeMph) ? `${parsed.bikeMph.toFixed(1)} mph` : "–"}
+                    {race?.bikeElevationGainFt ? ` • course gain: ${race.bikeElevationGainFt.toLocaleString()} ft` : ""}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    value={bike}
+                    onChange={(e) => setBike(e.target.value)}
+                    placeholder={units === "metric" ? "29.0" : "18.0"}
+                    inputMode="decimal"
+                  />
+                  <div className="hint">avg speed</div>
+                </>
+              )}
             </label>
             <label className="label">
               {units === "metric" ? "Run pace (km)" : "Run pace (mile)"}
@@ -337,6 +399,92 @@ export default function App() {
               </select>
             </label>
           </div>
+
+          <div className="row2">
+            <label className="label">
+              Bike input
+              <select value={bikeModel} onChange={(e) => setBikeModel(e.target.value)}>
+                <option value="speed">Speed</option>
+                <option value="power">Power (watts)</option>
+              </select>
+            </label>
+
+            {bikeModel === "power" ? (
+              <label className="label">
+                Athlete weight ({units === "metric" ? "kg" : "lb"})
+                <input
+                  value={athleteWeight}
+                  onChange={(e) => setAthleteWeight(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder={units === "metric" ? "75" : "165"}
+                  inputMode="decimal"
+                  autoComplete="off"
+                />
+                <div className="hint">body weight</div>
+              </label>
+            ) : (
+              <div />
+            )}
+          </div>
+
+          {bikeModel === "power" && (
+            <>
+              <div className="row2">
+                <label className="label">
+                  Bike weight ({units === "metric" ? "kg" : "lb"})
+                  <input
+                    value={bikeWeight}
+                    onChange={(e) => setBikeWeight(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder={units === "metric" ? "9" : "20"}
+                    inputMode="decimal"
+                    autoComplete="off"
+                  />
+                  <div className="hint">bike + kit estimate</div>
+                </label>
+
+                <label className="label">
+                  CdA (aero)
+                  <input
+                    value={cdA}
+                    onChange={(e) => setCdA(e.target.value.replace(/[^0-9.]/g, ""))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                  />
+                  <input
+                    type="range"
+                    min="0.20"
+                    max="0.40"
+                    step="0.01"
+                    value={Number(cdA) || 0.28}
+                    onChange={(e) => setCdA(String(e.target.value))}
+                  />
+                  <div className="hint">lower = more aero (tri bike often ~0.23–0.30)</div>
+                </label>
+              </div>
+
+              <div className="row2">
+                <label className="label">
+                  Crr (tires)
+                  <input
+                    value={crr}
+                    onChange={(e) => setCrr(e.target.value.replace(/[^0-9.]/g, ""))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                  />
+                  <input
+                    type="range"
+                    min="0.002"
+                    max="0.008"
+                    step="0.0005"
+                    value={Number(crr) || 0.004}
+                    onChange={(e) => setCrr(String(e.target.value))}
+                  />
+                  <div className="hint">rolling resistance (good tires ~0.003–0.005)</div>
+                </label>
+
+                <div />
+              </div>
+            </>
+          )}
         </section>
 
         <section className="card">
@@ -426,7 +574,7 @@ export default function App() {
 
       <footer className="footer">
         <div className="tiny">
-          v0.2 • {units === "metric" ? "metric units" : "imperial units"} • adjust multipliers later when reality yells at us
+          v0.3 • {units === "metric" ? "metric units" : "imperial units"} • now with watts-mode bike estimates
         </div>
       </footer>
     </div>
