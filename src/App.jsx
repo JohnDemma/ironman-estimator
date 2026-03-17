@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 import "./app.css";
 import { RACE_CATALOG, getRaceById } from "./races.generated";
 import { DYNAMICS, LEVELS, estimateBikeMphFromPower, estimateFinish } from "./calc";
@@ -45,6 +47,9 @@ export default function App() {
   const [bikeWatts, setBikeWatts] = useState("180");
   const [athleteWeight, setAthleteWeight] = useState(units === "metric" ? "75" : "165");
   const [bikeWeight, setBikeWeight] = useState(units === "metric" ? "9" : "20");
+  const [bikeSetup, setBikeSetup] = useState("tri"); // road | road_aerobars | tri
+  const [aeroPos, setAeroPos] = useState("0.6"); // 0..1 (relaxed -> aggressive)
+  const [advancedAero, setAdvancedAero] = useState(false);
   const [cdA, setCdA] = useState("0.28");
   const [crr, setCrr] = useState("0.004");
 
@@ -71,6 +76,9 @@ export default function App() {
     if (q.w) setBikeWatts(q.w);
     if (q.aw) setAthleteWeight(q.aw);
     if (q.bw) setBikeWeight(q.bw);
+    if (q.bs) setBikeSetup(q.bs);
+    if (q.ap) setAeroPos(q.ap);
+    if (q.adv === "1") setAdvancedAero(true);
     if (q.cda) setCdA(q.cda);
     if (q.crr) setCrr(q.crr);
 
@@ -206,6 +214,24 @@ export default function App() {
     const athleteKg = units === "metric" ? athleteW : athleteW / 2.20462;
     const bikeKg = units === "metric" ? bikeW : bikeW / 2.20462;
 
+    // Preset-based aero/rolling assumptions with a single "position" slider.
+    // These are intentionally conservative defaults.
+    const preset = (() => {
+      switch (bikeSetup) {
+        case "road":
+          return { cdAlo: 0.34, cdAhi: 0.38, crr: 0.0050 };
+        case "road_aerobars":
+          return { cdAlo: 0.28, cdAhi: 0.33, crr: 0.0045 };
+        case "tri":
+        default:
+          return { cdAlo: 0.23, cdAhi: 0.29, crr: 0.0040 };
+      }
+    })();
+
+    const pos = clamp(Number(aeroPos), 0, 1);
+    const cdAEffective = advancedAero ? Number(cdA) : (preset.cdAhi + (preset.cdAlo - preset.cdAhi) * pos);
+    const crrEffective = advancedAero ? Number(crr) : preset.crr;
+
     const elevationGainFt = race?.bikeElevationGainFt ?? 0;
 
     const bikeMph = bikeModel === "power"
@@ -213,8 +239,8 @@ export default function App() {
           powerWatts: Number(bikeWatts),
           athleteKg,
           bikeKg,
-          cdA: Number(cdA),
-          crr: Number(crr),
+          cdA: cdAEffective,
+          crr: crrEffective,
           bikeMiles: race?.bikeMiles ?? 0,
           elevationGainFt,
         })
@@ -227,8 +253,10 @@ export default function App() {
       athleteKg,
       bikeKg,
       elevationGainFt,
+      cdAEffective,
+      crrEffective,
     };
-  }, [swim, bike, run, units, bikeModel, bikeWatts, athleteWeight, bikeWeight, cdA, crr, race]);
+  }, [swim, bike, run, units, bikeModel, bikeWatts, athleteWeight, bikeWeight, bikeSetup, aeroPos, advancedAero, cdA, crr, race]);
 
   const result = useMemo(() => {
     if (!race) return null;
@@ -257,6 +285,9 @@ export default function App() {
       w: bikeWatts,
       aw: athleteWeight,
       bw: bikeWeight,
+      bs: bikeSetup,
+      ap: aeroPos,
+      adv: advancedAero ? "1" : "0",
       cda: cdA,
       crr,
       swim,
@@ -373,6 +404,8 @@ export default function App() {
                   <div className="hint">
                     Est. speed: {Number.isFinite(parsed.bikeMph) ? `${parsed.bikeMph.toFixed(1)} mph` : "–"}
                     {race?.bikeElevationGainFt ? ` • course gain: ${race.bikeElevationGainFt.toLocaleString()} ft` : ""}
+                    {Number.isFinite(parsed.cdAEffective) ? ` • CdA ${parsed.cdAEffective.toFixed(2)}` : ""}
+                    {Number.isFinite(parsed.crrEffective) ? ` • Crr ${parsed.crrEffective.toFixed(4)}` : ""}
                   </div>
                 </>
               ) : (
@@ -431,6 +464,30 @@ export default function App() {
             <>
               <div className="row2">
                 <label className="label">
+                  Bike setup
+                  <select value={bikeSetup} onChange={(e) => setBikeSetup(e.target.value)}>
+                    <option value="road">Road bike (hoods)</option>
+                    <option value="road_aerobars">Road bike + aerobars</option>
+                    <option value="tri">Tri bike (aero)</option>
+                  </select>
+                </label>
+
+                <label className="label">
+                  Position / aero
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={Number(aeroPos) || 0}
+                    onChange={(e) => setAeroPos(String(e.target.value))}
+                  />
+                  <div className="hint">relaxed ↔ aggressive (affects CdA)</div>
+                </label>
+              </div>
+
+              <div className="row2">
+                <label className="label">
                   Bike weight ({units === "metric" ? "kg" : "lb"})
                   <input
                     value={bikeWeight}
@@ -443,47 +500,40 @@ export default function App() {
                 </label>
 
                 <label className="label">
-                  CdA (aero)
-                  <input
-                    value={cdA}
-                    onChange={(e) => setCdA(e.target.value.replace(/[^0-9.]/g, ""))}
-                    inputMode="decimal"
-                    autoComplete="off"
-                  />
-                  <input
-                    type="range"
-                    min="0.20"
-                    max="0.40"
-                    step="0.01"
-                    value={Number(cdA) || 0.28}
-                    onChange={(e) => setCdA(String(e.target.value))}
-                  />
-                  <div className="hint">lower = more aero (tri bike often ~0.23–0.30)</div>
+                  Advanced aero (optional)
+                  <label className="check" style={{ marginTop: 6 }}>
+                    <input type="checkbox" checked={advancedAero} onChange={(e) => setAdvancedAero(e.target.checked)} />
+                    Manually set CdA/Crr
+                  </label>
+                  <div className="hint">use only if you know your numbers</div>
                 </label>
               </div>
 
-              <div className="row2">
-                <label className="label">
-                  Crr (tires)
-                  <input
-                    value={crr}
-                    onChange={(e) => setCrr(e.target.value.replace(/[^0-9.]/g, ""))}
-                    inputMode="decimal"
-                    autoComplete="off"
-                  />
-                  <input
-                    type="range"
-                    min="0.002"
-                    max="0.008"
-                    step="0.0005"
-                    value={Number(crr) || 0.004}
-                    onChange={(e) => setCrr(String(e.target.value))}
-                  />
-                  <div className="hint">rolling resistance (good tires ~0.003–0.005)</div>
-                </label>
+              {advancedAero && (
+                <div className="row2">
+                  <label className="label">
+                    CdA
+                    <input
+                      value={cdA}
+                      onChange={(e) => setCdA(e.target.value.replace(/[^0-9.]/g, ""))}
+                      inputMode="decimal"
+                      autoComplete="off"
+                    />
+                    <div className="hint">lower = more aero</div>
+                  </label>
 
-                <div />
-              </div>
+                  <label className="label">
+                    Crr
+                    <input
+                      value={crr}
+                      onChange={(e) => setCrr(e.target.value.replace(/[^0-9.]/g, ""))}
+                      inputMode="decimal"
+                      autoComplete="off"
+                    />
+                    <div className="hint">rolling resistance</div>
+                  </label>
+                </div>
+              )}
             </>
           )}
         </section>
@@ -575,7 +625,7 @@ export default function App() {
 
       <footer className="footer">
         <div className="tiny">
-          v0.3 • {units === "metric" ? "metric units" : "imperial units"} • now with watts-mode bike estimates
+          v0.4 • {units === "metric" ? "metric units" : "imperial units"} • watts bike (presets + aero slider)
         </div>
       </footer>
     </div>
